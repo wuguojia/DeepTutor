@@ -23,6 +23,7 @@ class DocumentType(Enum):
     TEXT = "text"
     MARKDOWN = "markdown"
     DOCX = "docx"
+    EPUB = "epub"
     IMAGE = "image"
     UNKNOWN = "unknown"
 
@@ -45,7 +46,7 @@ class FileTypeRouter:
     - Unsupported -> Skip with warning
     """
 
-    PARSER_EXTENSIONS = {".pdf"}
+    PARSER_EXTENSIONS = {".pdf", ".epub"}
 
     TEXT_EXTENSIONS = {
         # Plain text & docs
@@ -178,8 +179,10 @@ class FileTypeRouter:
         """Classify a single file by its type."""
         ext = Path(file_path).suffix.lower()
 
-        if ext in cls.PARSER_EXTENSIONS:
+        if ext == ".pdf":
             return DocumentType.PDF
+        elif ext == ".epub":
+            return DocumentType.EPUB
         elif ext in cls.TEXT_EXTENSIONS:
             return DocumentType.TEXT
         elif ext in cls.DOCX_EXTENSIONS:
@@ -216,7 +219,7 @@ class FileTypeRouter:
         for path in file_paths:
             doc_type = cls.get_document_type(path)
 
-            if doc_type == DocumentType.PDF:
+            if doc_type in (DocumentType.PDF, DocumentType.EPUB):
                 parser_files.append(path)
             elif doc_type in (DocumentType.TEXT, DocumentType.MARKDOWN):
                 text_files.append(path)
