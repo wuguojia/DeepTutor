@@ -52,11 +52,18 @@ try:
 except ImportError:  # pragma: no cover
     PptxPresentation = None  # type: ignore[assignment]
 
+try:
+    from ebooklib import epub
+    import html as html_parser
+except ImportError:  # pragma: no cover
+    epub = None  # type: ignore[assignment]
+    html_parser = None  # type: ignore[assignment]
+
 
 logger = logging.getLogger(__name__)
 
 
-_OFFICE_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".docx", ".xlsx", ".pptx"})
+_OFFICE_EXTENSIONS: frozenset[str] = frozenset({".pdf", ".docx", ".xlsx", ".pptx", ".epub"})
 # Text-like formats are sourced from the KB file router so chat and KB stay
 # in sync. Adding a new code / config extension in one place propagates here.
 TEXT_LIKE_EXTENSIONS: frozenset[str] = frozenset(FileTypeRouter.TEXT_EXTENSIONS)
@@ -69,6 +76,7 @@ MAX_EXTRACTED_CHARS_TOTAL = 150_000
 
 _PDF_MAGIC = b"%PDF-"
 _OOXML_MAGIC = b"PK\x03\x04"
+_EPUB_MAGIC = b"PK\x03\x04"  # EPUB is a ZIP file
 
 
 class DocumentExtractionError(Exception):
@@ -121,10 +129,10 @@ def _check_magic(ext: str, data: bytes, filename: str) -> None:
             raise CorruptDocumentError(
                 f"{filename} does not look like a PDF (bad header)", filename=filename
             )
-    elif ext in {".docx", ".xlsx", ".pptx"}:
+    elif ext in {".docx", ".xlsx", ".pptx", ".epub"}:
         if not data.startswith(_OOXML_MAGIC):
             raise CorruptDocumentError(
-                f"{filename} does not look like a valid Office file (bad header)",
+                f"{filename} does not look like a valid Office/EPUB file (bad header)",
                 filename=filename,
             )
 
@@ -159,6 +167,8 @@ def extract_text_from_bytes(filename: str, data: bytes) -> str:
         text = _extract_xlsx(data, filename)
     elif ext == ".pptx":
         text = _extract_pptx(data, filename)
+    elif ext == ".epub":
+        text = _extract_epub(data, filename)
     elif ext in TEXT_LIKE_EXTENSIONS:
         text = _extract_text_like(data, filename)
     else:  # pragma: no cover - guarded above
@@ -268,6 +278,62 @@ def _extract_pptx(data: bytes, filename: str) -> str:
         if slide_text:
             slides.append(f"--- Slide {i} ---\n" + "\n".join(slide_text))
     return "\n\n".join(slides)
+
+
+def _extract_epub(data: bytes, filename: str) -> str:
+    """Extract text from EPUB (electronic book) files.
+
+    EPUB is a ZIP-based format containing HTML/XHTML content.
+    This function extracts text from all document items in reading order.
+    """
+    if epub is None:
+        raise CorruptDocumentError(
+            f"{filename}: ebooklib not installed", filename=filename
+        )
+    try:
+        book = epub.read_epub(io.BytesIO(data))
+    except Exception as exc:
+        raise CorruptDocumentError(
+            f"{filename}: failed to open EPUB ({exc})", filename=filename
+        ) from exc
+
+    chapters: list[str] = []
+    for item in book.get_items():
+        if item.get_type() == epub.ITEM_DOCUMENT:
+            try:
+                content = item.get_content().decode('utf-8', errors='ignore')
+                # Strip HTML tags to get plain text
+                text = _strip_html_tags(content)
+                if text.strip():
+                    chapters.append(text)
+            except Exception as exc:
+                logger.warning(f"Failed to extract chapter from {filename}: {exc}")
+                continue
+
+    return "\n\n".join(chapters)
+
+
+def _strip_html_tags(html_content: str) -> str:
+    """Strip HTML tags from content and return plain text.
+
+    Uses html.parser to unescape entities and simple regex to remove tags.
+    """
+    import re
+
+    # Remove HTML tags
+    text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', ' ', text)
+
+    # Unescape HTML entities
+    if html_parser:
+        text = html_parser.unescape(text)
+
+    # Clean up whitespace
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n\n', text)
+
+    return text.strip()
 
 
 def _extract_text_like(data: bytes, filename: str) -> str:

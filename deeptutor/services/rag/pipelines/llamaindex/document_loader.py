@@ -23,8 +23,16 @@ class LlamaIndexDocumentLoader:
 
         for file_path_str in classification.parser_files:
             file_path = Path(file_path_str)
-            self.logger.info(f"Parsing PDF: {file_path.name}")
-            text = self._extract_pdf_text(file_path)
+            ext = file_path.suffix.lower()
+            if ext == ".pdf":
+                self.logger.info(f"Parsing PDF: {file_path.name}")
+                text = self._extract_pdf_text(file_path)
+            elif ext == ".epub":
+                self.logger.info(f"Parsing EPUB: {file_path.name}")
+                text = self._extract_epub_text(file_path)
+            else:
+                self.logger.warning(f"Unsupported parser file type: {file_path.name}")
+                continue
             self._append_if_nonempty(documents, file_path, text)
 
         for file_path_str in classification.text_files:
@@ -69,3 +77,53 @@ class LlamaIndexDocumentLoader:
         except Exception as exc:
             self.logger.error(f"Failed to extract PDF text: {exc}")
             return ""
+
+    def _extract_epub_text(self, file_path: Path) -> str:
+        """Extract text from EPUB files."""
+        try:
+            from ebooklib import epub
+            import re
+
+            book = epub.read_epub(str(file_path))
+            chapters: list[str] = []
+
+            for item in book.get_items():
+                if item.get_type() == epub.ITEM_DOCUMENT:
+                    try:
+                        content = item.get_content().decode('utf-8', errors='ignore')
+                        # Strip HTML tags
+                        text = self._strip_html_tags(content)
+                        if text.strip():
+                            chapters.append(text)
+                    except Exception as exc:
+                        self.logger.warning(f"Failed to extract chapter: {exc}")
+                        continue
+
+            return "\n\n".join(chapters)
+        except ImportError:
+            self.logger.warning("ebooklib not installed. Cannot extract EPUB text.")
+            return ""
+        except Exception as exc:
+            self.logger.error(f"Failed to extract EPUB text: {exc}")
+            return ""
+
+    def _strip_html_tags(self, html_content: str) -> str:
+        """Strip HTML tags from content and return plain text."""
+        import re
+        import html
+
+        # Remove script and style tags with their content
+        text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+        text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+        # Remove all HTML tags
+        text = re.sub(r'<[^>]+>', ' ', text)
+
+        # Unescape HTML entities
+        text = html.unescape(text)
+
+        # Clean up whitespace
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'\n\s*\n', '\n\n', text)
+
+        return text.strip()
