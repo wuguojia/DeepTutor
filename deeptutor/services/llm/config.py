@@ -4,6 +4,20 @@ LLM Configuration
 
 Configuration management for LLM services.
 Simplified version - loads from unified config service or falls back to .env.
+
+Environment Variables:
+    LLM_MODEL: Main LLM model name (required)
+    LLM_VISION_MODEL: Separate model for vision tasks (optional, defaults to LLM_MODEL)
+    LLM_API_KEY: API key for LLM provider
+    LLM_HOST: Base URL for LLM API (required)
+    LLM_BINDING: Provider binding (default: openai)
+    LLM_API_VERSION: API version (for Azure OpenAI)
+
+Examples:
+    export LLM_MODEL=gpt-4o-mini
+    export LLM_VISION_MODEL=gpt-4o
+    export LLM_HOST=https://api.openai.com/v1
+    export LLM_API_KEY=sk-xxx
 """
 
 from __future__ import annotations
@@ -42,6 +56,7 @@ class LLMConfigUpdate(TypedDict, total=False):
     max_concurrency: int
     requests_per_minute: int
     traffic_controller: "TrafficController" | None
+    vision_model: str | None
 
 
 logger = logging.getLogger(__name__)
@@ -111,6 +126,7 @@ class LLMConfig:
     max_concurrency: int = 20
     requests_per_minute: int = 600
     traffic_controller: TrafficController | None = None
+    vision_model: str | None = None  # Separate model for vision tasks (defaults to model if None)
 
     def __post_init__(self) -> None:
         if self.effective_url is None:
@@ -123,6 +139,10 @@ class LLMConfig:
     def get_api_key(self) -> str:
         """Return the API key string for provider consumers."""
         return self.api_key
+
+    def get_vision_model(self) -> str:
+        """Return the vision model, falling back to main model if not specified."""
+        return self.vision_model or self.model
 
 
 _LLM_CONFIG_CACHE: LLMConfig | None = None
@@ -165,6 +185,7 @@ def _get_llm_config_from_env() -> LLMConfig:
     api_key = _strip_value(env_store.get("LLM_API_KEY"))
     base_url = _strip_value(env_store.get("LLM_HOST"))
     api_version = _strip_value(env_store.get("LLM_API_VERSION"))
+    vision_model = _strip_value(env_store.get("LLM_VISION_MODEL"))
 
     # Validate required configuration
     if not model:
@@ -182,6 +203,7 @@ def _get_llm_config_from_env() -> LLMConfig:
         api_key=api_key or "",
         base_url=base_url,
         api_version=api_version,
+        vision_model=vision_model,
     )
 
 

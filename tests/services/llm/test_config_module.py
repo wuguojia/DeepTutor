@@ -146,6 +146,58 @@ def test_strip_value_handles_quotes() -> None:
     assert config_module._strip_value(" 'value' ") == "value"
 
 
+def test_vision_model_defaults_to_main_model() -> None:
+    """Vision model should default to main model when not specified."""
+    config = LLMConfig(
+        model="gpt-4o-mini",
+        api_key="test-key",
+        base_url="https://api.openai.com/v1"
+    )
+    assert config.vision_model is None
+    assert config.get_vision_model() == "gpt-4o-mini"
+
+
+def test_vision_model_explicit() -> None:
+    """Vision model should be used when explicitly specified."""
+    config = LLMConfig(
+        model="gpt-4o-mini",
+        api_key="test-key",
+        base_url="https://api.openai.com/v1",
+        vision_model="gpt-4o"
+    )
+    assert config.vision_model == "gpt-4o"
+    assert config.get_vision_model() == "gpt-4o"
+
+
+def test_vision_model_from_env(monkeypatch, tmp_path: Path) -> None:
+    """Vision model should be loaded from LLM_VISION_MODEL env variable."""
+    _reset_config_cache()
+    monkeypatch.setattr(
+        config_module,
+        "resolve_llm_runtime_config",
+        lambda: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    _set_temp_env_store(
+        monkeypatch,
+        tmp_path,
+        "\n".join(
+            [
+                "LLM_MODEL=gpt-4o-mini",
+                "LLM_VISION_MODEL=gpt-4o",
+                "LLM_HOST=https://api.openai.com/v1",
+                "LLM_API_KEY=test-key",
+                "LLM_BINDING=openai",
+            ]
+        )
+        + "\n",
+    )
+
+    config = config_module.get_llm_config()
+    assert config.model == "gpt-4o-mini"
+    assert config.vision_model == "gpt-4o"
+    assert config.get_vision_model() == "gpt-4o"
+
+
 def test_resolver_missing_model_raises(monkeypatch, tmp_path: Path) -> None:
     _reset_config_cache()
 

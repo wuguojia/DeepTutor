@@ -30,13 +30,15 @@ class ImageAnalysis:
 class EPUBImageAnalyzer:
     """Analyze images from EPUB using vision models."""
 
-    def __init__(self, vision_client=None):
+    def __init__(self, vision_client=None, vision_model: Optional[str] = None):
         """Initialize image analyzer with optional vision client.
 
         Args:
             vision_client: Vision-capable LLM client. If None, will be lazy-loaded.
+            vision_model: Specific model to use for vision tasks. If None, uses config default.
         """
         self.vision_client = vision_client
+        self.vision_model = vision_model
         self._vision_loaded = False
 
     def _ensure_vision_client(self):
@@ -47,6 +49,15 @@ class EPUBImageAnalyzer:
 
                 self.vision_client = get_vision_client()
                 self._vision_loaded = True
+
+                # Get vision model from config if not specified
+                if self.vision_model is None:
+                    from deeptutor.services.llm.config import get_llm_config
+                    try:
+                        llm_config = get_llm_config()
+                        self.vision_model = llm_config.get_vision_model()
+                    except Exception:
+                        pass  # Will use client's default model
             except Exception as exc:
                 logger.warning(f"Failed to load vision client: {exc}")
                 self._vision_loaded = True
@@ -162,15 +173,20 @@ Respond in JSON format:
                 }
             ]
 
+            # Prepare model kwargs if vision_model is specified
+            model_kwargs = {}
+            if self.vision_model:
+                model_kwargs['model'] = self.vision_model
+
             # Call vision client
             if hasattr(self.vision_client, 'create_completion'):
                 response = await self.vision_client.create_completion(
-                    messages=messages, temperature=0.3, max_tokens=800
+                    messages=messages, temperature=0.3, max_tokens=800, **model_kwargs
                 )
                 return response.get('content', '')
             elif hasattr(self.vision_client, 'chat'):
                 response = await self.vision_client.chat(
-                    messages=messages, temperature=0.3
+                    messages=messages, temperature=0.3, **model_kwargs
                 )
                 return response.get('content', '')
             else:
