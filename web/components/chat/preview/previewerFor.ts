@@ -42,7 +42,7 @@ export interface FilePreviewSource {
   id?: string;
 }
 
-const OFFICE_BINARY_EXTS = new Set([".docx", ".xlsx", ".pptx"]);
+const OFFICE_BINARY_EXTS = new Set([".docx", ".xlsx", ".pptx", ".epub"]);
 const MARKDOWN_EXTS = new Set([".md", ".markdown", ".rst", ".asciidoc"]);
 const PLAIN_TEXT_EXTS = new Set([
   ".txt",
