@@ -81,6 +81,7 @@ class LlamaIndexDocumentLoader:
     def _extract_epub_text(self, file_path: Path) -> str:
         """Extract text from EPUB files with enhanced metadata and structure."""
         try:
+            import ebooklib
             from ebooklib import epub
             import re
 
@@ -113,7 +114,7 @@ class LlamaIndexDocumentLoader:
             image_count = 0
 
             for item in book.get_items():
-                if item.get_type() == epub.ITEM_DOCUMENT:
+                if item.get_type() == ebooklib.ITEM_DOCUMENT:
                     try:
                         content = item.get_content().decode('utf-8', errors='ignore')
                         # Extract chapter title
@@ -128,7 +129,7 @@ class LlamaIndexDocumentLoader:
                     except Exception as exc:
                         self.logger.warning(f"Failed to extract chapter: {exc}")
                         continue
-                elif item.get_type() == epub.ITEM_IMAGE:
+                elif item.get_type() == ebooklib.ITEM_IMAGE:
                     image_count += 1
 
             if chapters:

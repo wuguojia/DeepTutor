@@ -53,9 +53,11 @@ except ImportError:  # pragma: no cover
     PptxPresentation = None  # type: ignore[assignment]
 
 try:
+    import ebooklib
     from ebooklib import epub
     import html as html_parser
 except ImportError:  # pragma: no cover
+    ebooklib = None  # type: ignore[assignment]
     epub = None  # type: ignore[assignment]
     html_parser = None  # type: ignore[assignment]
 
@@ -326,7 +328,7 @@ def _extract_epub(data: bytes, filename: str) -> str:
     image_count = 0
 
     for item in book.get_items():
-        if item.get_type() == epub.ITEM_DOCUMENT:
+        if item.get_type() == ebooklib.ITEM_DOCUMENT:
             try:
                 content = item.get_content().decode('utf-8', errors='ignore')
                 # Extract chapter title if available
@@ -341,7 +343,7 @@ def _extract_epub(data: bytes, filename: str) -> str:
             except Exception as exc:
                 logger.warning(f"Failed to extract chapter from {filename}: {exc}")
                 continue
-        elif item.get_type() == epub.ITEM_IMAGE:
+        elif item.get_type() == ebooklib.ITEM_IMAGE:
             # Track images for metadata
             image_count += 1
 
