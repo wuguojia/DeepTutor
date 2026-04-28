@@ -46,7 +46,7 @@ class VisionSolverAgent(BaseAgent):
             api_key: API key for LLM provider
             base_url: Base URL for LLM API
             model: Model name for text generation
-            vision_model: Model name for vision tasks (defaults to model)
+            vision_model: Model name for vision tasks (defaults to config.get_vision_model())
             language: Language setting ('zh' or 'en')
             **kwargs: Additional arguments passed to BaseAgent
         """
@@ -59,6 +59,15 @@ class VisionSolverAgent(BaseAgent):
             language=language,
             **kwargs,
         )
+
+        # If vision_model not specified, try to get from config
+        if vision_model is None:
+            from deeptutor.services.llm.config import get_llm_config
+            try:
+                llm_config = get_llm_config()
+                vision_model = llm_config.get_vision_model()
+            except Exception:
+                pass  # Will fall back to model
 
         self.vision_model = vision_model or model
         self._load_prompts()
