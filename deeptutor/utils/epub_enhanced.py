@@ -39,6 +39,7 @@ def extract_epub_enhanced(
         CorruptDocumentError: If EPUB is invalid or corrupted
     """
     try:
+        import ebooklib
         from ebooklib import epub
     except ImportError:
         from deeptutor.utils.document_extractor import CorruptDocumentError
@@ -85,7 +86,7 @@ def extract_epub_enhanced(
     sample_text = ""  # For classification
 
     for item in book.get_items():
-        if item.get_type() == epub.ITEM_DOCUMENT:
+        if item.get_type() == ebooklib.ITEM_DOCUMENT:
             try:
                 content = item.get_content().decode('utf-8', errors='ignore')
                 from deeptutor.utils.document_extractor import (
@@ -110,7 +111,7 @@ def extract_epub_enhanced(
                 logger.warning(f"Failed to extract chapter from {filename}: {exc}")
                 continue
 
-        elif item.get_type() == epub.ITEM_IMAGE:
+        elif item.get_type() == ebooklib.ITEM_IMAGE:
             image_count += 1
 
     # Add AI classification if enabled
@@ -217,6 +218,7 @@ async def extract_epub_enhanced_async(
         Extracted and enhanced text content
     """
     try:
+        import ebooklib
         from ebooklib import epub
     except ImportError:
         from deeptutor.utils.document_extractor import CorruptDocumentError
@@ -259,7 +261,7 @@ async def extract_epub_enhanced_async(
         # Fallback to simple extraction
         chapters = []
         for item in book.get_items():
-            if item.get_type() == epub.ITEM_DOCUMENT:
+            if item.get_type() == ebooklib.ITEM_DOCUMENT:
                 try:
                     content = item.get_content().decode('utf-8', errors='ignore')
                     from deeptutor.utils.document_extractor import _strip_html_tags_enhanced

@@ -288,6 +288,7 @@ def extract_epub_images(epub_book) -> list[tuple[bytes, str]]:
         List of (image_data, image_name) tuples
     """
     try:
+        import ebooklib
         from ebooklib import epub
     except ImportError:
         logger.error("ebooklib not installed")
@@ -295,7 +296,7 @@ def extract_epub_images(epub_book) -> list[tuple[bytes, str]]:
 
     images = []
     for item in epub_book.get_items():
-        if item.get_type() == epub.ITEM_IMAGE:
+        if item.get_type() == ebooklib.ITEM_IMAGE:
             try:
                 image_data = item.get_content()
                 image_name = item.get_name() or f"image_{len(images)}"

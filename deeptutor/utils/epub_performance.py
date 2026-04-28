@@ -192,13 +192,14 @@ class StreamingEPUBProcessor:
             List of processed chapter texts
         """
         try:
+            import ebooklib
             from ebooklib import epub
         except ImportError:
             logger.error("ebooklib not installed")
             return []
 
         # Collect all document items
-        items = [item for item in epub_book.get_items() if item.get_type() == epub.ITEM_DOCUMENT]
+        items = [item for item in epub_book.get_items() if item.get_type() == ebooklib.ITEM_DOCUMENT]
 
         start_time = time.time()
         processed_chapters = []
