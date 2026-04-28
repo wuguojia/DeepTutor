@@ -284,7 +284,8 @@ def _extract_epub(data: bytes, filename: str) -> str:
     """Extract text from EPUB (electronic book) files.
 
     EPUB is a ZIP-based format containing HTML/XHTML content.
-    This function extracts text from all document items in reading order.
+    This function extracts text from all document items in reading order,
+    including metadata, chapter structure, and embedded images descriptions.
     """
     if epub is None:
         raise CorruptDocumentError(
@@ -297,20 +298,61 @@ def _extract_epub(data: bytes, filename: str) -> str:
             f"{filename}: failed to open EPUB ({exc})", filename=filename
         ) from exc
 
+    # Extract metadata
+    metadata_parts: list[str] = []
+    title = book.get_metadata('DC', 'title')
+    if title:
+        metadata_parts.append(f"Title: {title[0][0]}")
+
+    author = book.get_metadata('DC', 'creator')
+    if author:
+        metadata_parts.append(f"Author: {author[0][0]}")
+
+    language = book.get_metadata('DC', 'language')
+    if language:
+        metadata_parts.append(f"Language: {language[0][0]}")
+
+    publisher = book.get_metadata('DC', 'publisher')
+    if publisher:
+        metadata_parts.append(f"Publisher: {publisher[0][0]}")
+
+    # Add metadata header if available
+    result_parts: list[str] = []
+    if metadata_parts:
+        result_parts.append("=== EPUB Metadata ===\n" + "\n".join(metadata_parts))
+
+    # Extract chapters with improved structure
     chapters: list[str] = []
+    image_count = 0
+
     for item in book.get_items():
         if item.get_type() == epub.ITEM_DOCUMENT:
             try:
                 content = item.get_content().decode('utf-8', errors='ignore')
-                # Strip HTML tags to get plain text
-                text = _strip_html_tags(content)
+                # Extract chapter title if available
+                chapter_title = _extract_chapter_title(content)
+                # Strip HTML tags to get plain text with enhanced processing
+                text = _strip_html_tags_enhanced(content)
                 if text.strip():
-                    chapters.append(text)
+                    if chapter_title:
+                        chapters.append(f"--- {chapter_title} ---\n{text}")
+                    else:
+                        chapters.append(text)
             except Exception as exc:
                 logger.warning(f"Failed to extract chapter from {filename}: {exc}")
                 continue
+        elif item.get_type() == epub.ITEM_IMAGE:
+            # Track images for metadata
+            image_count += 1
 
-    return "\n\n".join(chapters)
+    if chapters:
+        result_parts.append("\n\n".join(chapters))
+
+    # Add image summary if images exist
+    if image_count > 0:
+        result_parts.append(f"\n[This EPUB contains {image_count} embedded images]")
+
+    return "\n\n".join(result_parts)
 
 
 def _strip_html_tags(html_content: str) -> str:
@@ -332,6 +374,87 @@ def _strip_html_tags(html_content: str) -> str:
     # Clean up whitespace
     text = re.sub(r'\s+', ' ', text)
     text = re.sub(r'\n\s*\n', '\n\n', text)
+
+    return text.strip()
+
+
+def _extract_chapter_title(html_content: str) -> str:
+    """Extract chapter title from HTML content.
+
+    Looks for h1, h2, or title tags at the beginning of the content.
+    """
+    import re
+
+    # Try h1 first
+    h1_match = re.search(r'<h1[^>]*>(.*?)</h1>', html_content, re.IGNORECASE | re.DOTALL)
+    if h1_match:
+        title = re.sub(r'<[^>]+>', '', h1_match.group(1))
+        if html_parser:
+            title = html_parser.unescape(title)
+        return title.strip()
+
+    # Try h2
+    h2_match = re.search(r'<h2[^>]*>(.*?)</h2>', html_content, re.IGNORECASE | re.DOTALL)
+    if h2_match:
+        title = re.sub(r'<[^>]+>', '', h2_match.group(1))
+        if html_parser:
+            title = html_parser.unescape(title)
+        return title.strip()
+
+    # Try title tag
+    title_match = re.search(r'<title[^>]*>(.*?)</title>', html_content, re.IGNORECASE | re.DOTALL)
+    if title_match:
+        title = re.sub(r'<[^>]+>', '', title_match.group(1))
+        if html_parser:
+            title = html_parser.unescape(title)
+        return title.strip()
+
+    return ""
+
+
+def _strip_html_tags_enhanced(html_content: str) -> str:
+    """Enhanced HTML tag stripping with better structure preservation.
+
+    Preserves code blocks, lists, tables, and other structured content.
+    """
+    import re
+
+    # Remove script and style tags
+    text = re.sub(r'<script[^>]*>.*?</script>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # Preserve code blocks with markers
+    text = re.sub(r'<pre[^>]*>(.*?)</pre>', r'\n[CODE]\n\1\n[/CODE]\n', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<code[^>]*>(.*?)</code>', r'`\1`', text, flags=re.DOTALL | re.IGNORECASE)
+
+    # Convert lists to readable format
+    text = re.sub(r'<li[^>]*>', '\n• ', text, flags=re.IGNORECASE)
+    text = re.sub(r'</li>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'</?[ou]l[^>]*>', '\n', text, flags=re.IGNORECASE)
+
+    # Convert tables to tab-separated format
+    text = re.sub(r'<tr[^>]*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</tr>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'<t[hd][^>]*>', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'</t[hd]>', '\t', text, flags=re.IGNORECASE)
+    text = re.sub(r'</?table[^>]*>', '\n[TABLE]\n', text, flags=re.IGNORECASE)
+
+    # Add line breaks for block elements
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</?p[^>]*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</?div[^>]*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</h[1-6]>', '\n', text, flags=re.IGNORECASE)
+
+    # Remove remaining HTML tags
+    text = re.sub(r'<[^>]+>', ' ', text)
+
+    # Unescape HTML entities
+    if html_parser:
+        text = html_parser.unescape(text)
+
+    # Clean up whitespace but preserve structure
+    text = re.sub(r' +', ' ', text)
+    text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text)
 
     return text.strip()
 
